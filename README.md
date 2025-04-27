@@ -1,10 +1,10 @@
 # FileSage
 
-![CI](https://github.com/yourusername/filesage/actions/workflows/ci.yml/badge.svg)
-![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green)
+[![CI](https://github.com/evagoras/filesage/actions/workflows/ci.yml/badge.svg)](https://github.com/evagoras/filesage/actions/workflows/ci.yml)
+![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-Smart, safe, and scalable file comparison toolkit.
+Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript projects.
 
 ## Install
 
