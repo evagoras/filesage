@@ -8,13 +8,15 @@ Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript pro
 
 ## Install
 
-npm install filesage
+`npm install filesage`
 
 ## Usage
 
+```
 import { expectFilesToBeEqual } from 'filesage'
 
 await expectFilesToBeEqual('path/to/file1', 'path/to/file2')
+```
 
 ## Features
 
