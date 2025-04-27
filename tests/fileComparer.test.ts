@@ -1,3 +1,5 @@
+// @ts-check
+
 import { test, expect } from '@playwright/test'
 import { expectFilesToBeEqual } from '../src/fileComparer'
 import { promises as fs } from 'fs'

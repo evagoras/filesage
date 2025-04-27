@@ -20,6 +20,6 @@
         "noFallthroughCasesInSwitch": true,
         "useUnknownInCatchVariables": true
     },
-    "include": ["src/**/*"],
+    "include": ["src/**/*", "tests/**/*"],
     "exclude": ["node_modules", "dist", "tests"]
 }
