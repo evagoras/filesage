@@ -12,11 +12,55 @@ Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript pro
 
 ## Usage
 
-```
+```typescript
 import { expectFilesToBeEqual } from 'filesage'
 
 await expectFilesToBeEqual('path/to/file1', 'path/to/file2')
 ```
+
+## ⚙️ Configuration
+
+FileSage allows you to customize internal performance thresholds easily.
+
+### Default thresholds
+
+| Setting | Default Value |
+|:--------|:--------------|
+| `textMaxSizeBytes` | 50 KB |
+| `binaryMaxSizeBytes` | 100 KB |
+
+These thresholds determine when FileSage switches comparison strategies.
+
+---
+
+### How to customize
+
+You can override the defaults globally in your project:
+
+```typescript
+import { FileSageConfig } from 'filesage'
+
+// Increase text file string-compare threshold to 80KB
+FileSageConfig.textMaxSizeBytes = 80 * 1024
+
+// Increase binary file threshold to 200KB
+FileSageConfig.binaryMaxSizeBytes = 200 * 1024
+```
+Or use the helper function:
+```typescript
+import { configureFileSage } from 'filesage'
+
+configureFileSage({
+  textMaxSizeBytes: 80 * 1024,
+  binaryMaxSizeBytes: 200 * 1024
+})
+```
+✅ Configuration changes apply immediately for all future file comparisons.<br>
+✅ No rebuild or restart is necessary.
+
+### Important Notes
+- These settings are global.
+- You should configure them early in your app before using file comparison functions.
 
 ## Features
 

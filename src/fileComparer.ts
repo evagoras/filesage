@@ -2,8 +2,22 @@ import { promises as fs } from 'fs'
 import { createHash } from 'crypto'
 import path from 'path'
 
-const TEXT_LARGE_FILE_SIZE = 100 * 1024 // 100 KB
-const BINARY_LARGE_FILE_SIZE = 100 * 1024 * 1024 // 100 MB
+// Types
+export interface FileSageConfigType {
+    textMaxSizeBytes: number
+    binaryMaxSizeBytes: number
+}
+  
+// Default Configuration
+export const FileSageConfig: FileSageConfigType = {
+    textMaxSizeBytes: 50 * 1024,     // 50 KB
+    binaryMaxSizeBytes: 100 * 1024   // 100 KB (default, adjust if needed)
+}
+  
+// Optional Helper Function
+export function configureFileSage(options: Partial<FileSageConfigType>) {
+    Object.assign(FileSageConfig, options)
+}  
 
 const textFileExtensions = ['.txt', '.csv', '.json', '.xml', '.html', '.md']
 
@@ -65,13 +79,13 @@ export async function expectFilesToBeEqual(filePath1: string, filePath2: string)
   const isText = isTextFile(filePath1)
 
   if (isText) {
-    if (size1 < TEXT_LARGE_FILE_SIZE) {
+    if (size1 <= FileSageConfig.textMaxSizeBytes) {
       await compareFilesByString(filePath1, filePath2)
     } else {
       await compareFilesByHash(filePath1, filePath2)
     }
   } else {
-    if (size1 < BINARY_LARGE_FILE_SIZE) {
+    if (size1 <= FileSageConfig.binaryMaxSizeBytes) {
       await compareFilesByBuffer(filePath1, filePath2)
     } else {
       await compareFilesByHash(filePath1, filePath2)
