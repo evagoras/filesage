@@ -1,0 +1,35 @@
+{
+    "name": "filesage",
+    "version": "1.0.0",
+    "description": "Smart, safe, and scalable file comparison toolkit for text and binary files.",
+    "main": "dist/fileComparer.js",
+    "types": "dist/fileComparer.d.ts",
+    "scripts": {
+      "build": "tsc",
+      "test": "playwright test"
+    },
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/yourusername/filesage.git"
+    },
+    "keywords": [
+      "file",
+      "compare",
+      "comparison",
+      "binary",
+      "text",
+      "hash",
+      "typescript",
+      "buffer",
+      "benchmark",
+      "performance",
+      "playwright"
+    ],
+    "author": "Evagoras Charalambous",
+    "license": "MIT",
+    "devDependencies": {
+      "@playwright/test": "^1.52.0",
+      "typescript": "^5.8.3"
+    }
+  }
+  
