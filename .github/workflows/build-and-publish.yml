@@ -1,0 +1,56 @@
+# =========================================
+# GitHub Actions Workflow: Build and Publish to NPM
+# =========================================
+#
+# How to use this file:
+#
+# - This workflow runs ONLY when you create a GitHub Release (tag).
+# - It builds your TypeScript project and publishes the output to NPM.
+#
+# Steps to trigger publishing:
+# 1. Push your code normally.
+# 2. Go to GitHub → Releases → "Draft a new release".
+# 3. Set Tag version (like v1.0.0), Title, and Description.
+# 4. Click "Publish release".
+# 5. This workflow will automatically run and publish to NPM.
+#
+# Before first use:
+# - You must create a GitHub Secret named NPM_TOKEN containing your NPM auth token.
+#   (Settings → Secrets → Actions → New repository secret → NPM_TOKEN)
+# - This token must have permission to publish your package.
+#
+# =========================================
+
+name: Build and Publish to NPM
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        registry-url: 'https://registry.npmjs.org/'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+
+    - name: Build project
+      run: npm run build
+
+    - name: Publish to NPM
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

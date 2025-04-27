@@ -1,15 +1,25 @@
 {
     "compilerOptions": {
-      "outDir": "dist",
-      "target": "ES2019",
-      "module": "commonjs",
-      "strict": true,
-      "esModuleInterop": true,
-      "declaration": true,
-      "skipLibCheck": true,
-      "forceConsistentCasingInFileNames": true
+        "target": "ES2022",
+        "lib": ["ES2022"],
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "outDir": "dist",
+        "rootDir": "src",
+        "strict": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "resolveJsonModule": true,
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "types": ["node"],
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "useUnknownInCatchVariables": true
     },
     "include": ["src/**/*"],
-    "exclude": ["node_modules", "dist"]
-  }
-  
+    "exclude": ["node_modules", "dist", "tests"]
+}
