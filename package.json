@@ -5,31 +5,31 @@
     "main": "dist/fileComparer.js",
     "types": "dist/fileComparer.d.ts",
     "scripts": {
-      "build": "tsc",
-      "test": "playwright test"
+        "build": "tsc",
+        "test": "playwright test"
     },
     "repository": {
-      "type": "git",
-      "url": "https://github.com/yourusername/filesage.git"
+        "type": "git",
+        "url": "https://github.com/evagoras/filesage.git"
     },
     "keywords": [
-      "file",
-      "compare",
-      "comparison",
-      "binary",
-      "text",
-      "hash",
-      "typescript",
-      "buffer",
-      "benchmark",
-      "performance",
-      "playwright"
+        "file",
+        "compare",
+        "comparison",
+        "binary",
+        "text",
+        "hash",
+        "typescript",
+        "buffer",
+        "benchmark",
+        "performance",
+        "playwright"
     ],
     "author": "Evagoras Charalambous",
     "license": "MIT",
     "devDependencies": {
-      "@playwright/test": "^1.52.0",
-      "typescript": "^5.8.3"
+        "@playwright/test": "^1.52.0",
+        "@types/node": "^22.15.2",
+        "typescript": "^5.8.3"
     }
-  }
-  
+}
