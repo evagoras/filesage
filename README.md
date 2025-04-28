@@ -1,7 +1,7 @@
 # FileSage
 
-[![CI](https://github.com/evagoras/filesage/actions/workflows/ci.yml/badge.svg)](https://github.com/evagoras/filesage/actions/workflows/ci.yml)
-![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-green)
+[![CI](https://github.com/evagoras/filesage/actions/workflows/ci.yml/badge.svg)](https://github.com/evagoras/filesage/actions/workflows/ci.yml)  
+![Node.js](https://img.shields.io/badge/node-%3E%3D22.0.0-green)  
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript projects.
@@ -13,38 +13,36 @@ npm install filesage
 ```
 
 ## Usage
-
 ```typescript
 import { expectFilesToBeEqual } from 'filesage'
 
-await expectFilesToBeEqual('path/to/file1', 'path/to/file2')
+await expectFilesToBeEqual(
+  'path/to/local.file',
+  'path/to/other.file'
+)
 ```
 
 ✅ Works for:
-- Local vs Local files (text or binary)
-- Local vs Remote URL files
+- **Local vs Local** (text or binary)
+- **Local vs Remote URL**
 
 ## ⚙️ Configuration
-
-FileSage lets you tailor comparison behavior to your needs.
+FileSage lets you tailor exactly which checks run (and in what order) when comparing to a **remote URL**.
 
 ### Default Configuration
 
-| Setting                      | Default Value                                                                                                 | Description                                            |
-|------------------------------|---------------------------------------------------------------------------------------------------------------|--------------------------------------------------------|
-| `remoteComparisonStrategies` | `['content-length','etag','partial-hash','stream-hash','stream-buffer-compare','download-buffer','download-hash']` | Order and priority of remote comparison strategies     |
-| `remoteTimeoutMs`            | `8000`                                                                                                        | Timeout for HTTP HEAD/GET requests (milliseconds)      |
-| `remoteMaxRetries`           | `2`                                                                                                           | Number of retries for transient network errors         |
-| `partialHashChunkSize`       | `64 KB`                                                                                                       | Byte count for head/tail ranges in partial-hash       |
-| `chunkCompareSize`           | `512 KB`                                                                                                      | Chunk size for streaming chunk-wise buffer compares   |
-| `mimeTypeCheckEnabled`       | `false`                                                                                                       | Enforce MIME type matching between local & remote      |
-| `preferPartialHash`          | `true`                                                                                                        | Use partial-hash locally instead of full-file hashing |
+| Setting | Default Value | Description |
+|-|-|-|
+| `comparisonPolicies`   | [<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'content-length' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'etag', expectedEtag: '' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'partial-hash' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'stream-hash' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'stream-buffer-compare' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'download-buffer' },<br>&nbsp;&nbsp;&nbsp;&nbsp;{ name: 'download-hash' }<br>] | Which policies to try, in order—first failure throws  |
+| `remoteTimeoutMs` | `8000` | HTTP HEAD/GET timeout (ms) |
+| `remoteMaxRetries` | `2` | Retries for transient network errors |
+| `partialHashChunkSize` | `64 * 1024` (64 KB) | Byte count for head/tail ranges in partial-hash |
+| `chunkCompareSize` | `512 * 1024` (512 KB) | Chunk size for stream-buffer compares |
+| `mimeTypeCheckEnabled` | `false` | Enforce MIME subtype match |
+| `preferPartialHash` | `true` | Use partial-hash locally instead of full hash |
 
----
-
-### Customization
-
-You can override configuration globally, e.g.:  
+### Global Overrides
+You can override **any** of these at runtime—no rebuild or restart needed:
 
 ```typescript
 import { configureFileSage } from 'filesage'
@@ -52,61 +50,158 @@ import { configureFileSage } from 'filesage'
 configureFileSage({
   remoteTimeoutMs: 10000,
   preferPartialHash: false,
-  remoteComparisonStrategies: ['etag', 'content-length', 'download-hash']
+  comparisonPolicies: [
+    { name: 'etag', expectedEtag: 'abcdef123456...' },
+    { name: 'content-length' }
+  ]
 })
 ```
-
-Or directly modify the config object:
+Or mutate the config object directly:
 
 ```typescript
 import { FileSageConfig } from 'filesage'
 
-FileSageConfig.remoteComparisonStrategies = [
-  'etag',
-  'content-length',
-  'partial-hash'
+FileSageConfig.comparisonPolicies = [
+  { name: 'content-length' },
+  { name: 'etag', expectedEtag: 'abcdef123456...' },
 ]
 FileSageConfig.remoteMaxRetries = 3
 ```
 
-No restart or rebuild is required—changes apply immediately.
+## 📚 Remote Comparison Policies
+Each policy is tried in **order**. The first one that **fails** will throw; if it passes, FileSage moves on to the next.
 
----
+| Policy                  | Notes                                                                     |
+|-------------------------|---------------------------------------------------------------------------|
+| `content-length`        | Compare local byte-length to Content-Length header                        |
+| `etag`                  | Send If-None-Match: <expectedEtag> and accept 304 or matching ETag header |
+| `partial-hash`          | Fetch only head + tail chunk via HTTP Range and compare SHA-256           |
+| `stream-hash`           | Stream entire file via HTTP and compare SHA-256 digests                   |
+| `stream-buffer-compare` | Stream chunks in parallel and compare Buffer.equals()                     |
+| `download-buffer`       | Download full file into buffer, then compare Buffer.equals()              |
+| `download-hash`         | Download full file, compute SHA-256, and compare                          |
 
-## 📚 Remote File Comparison Strategies
+## Examples
 
-| Strategy                 | Description                                                                                             |
-|--------------------------|---------------------------------------------------------------------------------------------------------|
-| `etag`                   | Compare local SHA (or partial SHA) to the server’s ETag header                                         |
-| `content-length`         | Compare local file size to server’s `Content-Length` header                                            |
-| `partial-hash`           | Fetch only head + tail byte ranges, hash them, and compare                                             |
-| `stream-hash`            | Stream entire file through SHA-256 and compare digests                                                  |
-| `stream-buffer-compare`  | Stream local and remote in parallel, compare each chunk                                                |
-| `download-buffer`        | Download full file into buffer, then `Buffer.equals(...)` for comparison                               |
-| `download-hash`          | Download full file, compute SHA-256, and compare digests                                               |
+### 1) Local vs Local
+```typescript
+import { expectFilesToBeEqual } from 'filesage'
 
-✅ Strategies are tried in order until one succeeds, minimizing data transfer and CPU work.
+await expectFilesToBeEqual(
+  'tests/foo.txt',
+  'tests/foo-copy.txt'
+)
+```
+### 2) CONTENT-LENGTH Only
+```typescript
+import { FileSageConfig, expectFilesToBeEqual } from 'filesage'
 
----
+FileSageConfig.comparisonPolicies = [
+  { name: 'content-length' }
+]
+
+await expectFilesToBeEqual(
+  'local.bin',
+  'https://example.com/file.bin'
+)
+```
+
+### 3) ETAG Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'etag', expectedEtag: '79e0a0933c7…' }
+]
+
+await expectFilesToBeEqual(
+  'local.txt',
+  'https://raw.githubusercontent.com/…/file.txt'
+)
+```
+
+### 4) PARTIAL-HASH Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'partial-hash' }
+]
+
+await expectFilesToBeEqual(
+  'large-local.txt',
+  'https://example.com/large.txt'
+)
+```
+
+### 5) STREAM-HASH Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'stream-hash' }
+]
+
+await expectFilesToBeEqual(
+  'large-local.bin',
+  'https://example.com/large.bin'
+)
+```
+
+### 6) STREAM-BUFFER-COMPARE Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'stream-buffer-compare' }
+]
+
+await expectFilesToBeEqual(
+  'large-local.bin',
+  'https://example.com/large.bin'
+)
+```
+
+### 7) DOWNLOAD-BUFFER Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'download-buffer' }
+]
+
+await expectFilesToBeEqual(
+  'local.bin',
+  'https://example.com/large.bin'
+)
+```
+
+### 8) DOWNLOAD-HASH Only
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'download-hash' }
+]
+
+await expectFilesToBeEqual(
+  'local.bin',
+  'https://example.com/large.bin'
+)
+```
+
+### 9) Mix & Match
+```typescript
+FileSageConfig.comparisonPolicies = [
+  { name: 'etag',           expectedEtag: 'abc123…' },
+  { name: 'content-length'  },
+  { name: 'partial-hash'    },
+  { name: 'stream-hash'     }
+]
+
+await expectFilesToBeEqual(
+  'local.data',
+  'https://example.com/data'
+)
+```
 
 ## Features
-
-- **Local vs Local**: exact text or binary comparisons (string vs buffer).
-- **Local vs Remote**: pluggable strategies with configurable priority.
-- **Low-memory streaming**: compare large files without full buffering.
-- **Partial-hash optimization**: quick probabilistic checks for huge assets.
-- **Strictly typed**: full TypeScript definitions, seamless Node.js v22+ support.
-- **Playwright-tested**: end-to-end tests ensure reliability.
-
----
+- Local vs Local: text or binary, exact compare
+- Local vs Remote: fine-grained, prioritized policies
+- Low-memory: stream comparisons for huge files
+- TypeScript: full types, Node v22+
+- Playwright-tested: reliable end-to-end behavior
 
 ## Related Tools
-
-- **FileSage Dev Tools** — Benchmark & tune file comparison performance.
-
----
+- FileSage Dev Tools — Benchmark & tune file comparison.
 
 ## License
-
-MIT
-
+MIT 
