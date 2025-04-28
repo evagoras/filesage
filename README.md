@@ -12,9 +12,11 @@ npm install filesage
 
 ## Usage
 
+```typescript
 import { expectFilesToBeEqual } from 'filesage'
 
 await expectFilesToBeEqual('path/to/file1', 'path/to/file2')
+```
 
 ✅ Works for:
 - Local vs Local files
@@ -44,6 +46,7 @@ mimeTypeCheckEnabled | false | Check MIME types for text vs binary
 
 You can override the defaults globally in your project:
 
+```typescript
 import { FileSageConfig } from 'filesage'
 
 // Example: Increase text threshold to 80 KB
@@ -54,12 +57,14 @@ FileSageConfig.preferPartialHash = false
 
 // Example: Customize remote comparison strategies
 FileSageConfig.remoteComparisonStrategies = ['etag', 'content-length', 'stream-buffer-compare']
+```
 
 ✅ Configuration changes apply immediately for all future file comparisons.
 ✅ No rebuild or restart is necessary.
 
 Or use the helper function:
 
+```typescript
 import { configureFileSage } from 'filesage'
 
 configureFileSage({
@@ -67,6 +72,7 @@ configureFileSage({
   remoteTimeoutMs: 10000,
   preferPartialHash: false
 })
+```
 
 ---
 
