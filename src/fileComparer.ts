@@ -3,7 +3,6 @@ import { promises as fsp } from 'fs'
 import { createHash } from 'crypto'
 import path from 'path'
 import axios from 'axios'
-import { pipeline } from 'stream/promises'
 
 // Strategy Types
 export type ComparisonStrategy =
@@ -16,8 +15,6 @@ export type ComparisonStrategy =
   | 'download-hash'
 
 export interface FileSageConfigType {
-  textMaxSizeBytes: number
-  binaryMaxSizeBytes: number
   remoteComparisonStrategies: ComparisonStrategy[]
   remoteTimeoutMs: number
   remoteMaxRetries: number
@@ -29,9 +26,15 @@ export interface FileSageConfigType {
 
 // Default Configuration
 export const FileSageConfig: FileSageConfigType = {
-  textMaxSizeBytes: 50 * 1024,
-  binaryMaxSizeBytes: 100 * 1024,
-  remoteComparisonStrategies: ['etag', 'content-length', 'partial-hash', 'stream-hash'],
+  remoteComparisonStrategies: [
+    'content-length',
+    'etag',
+    'partial-hash',
+    'stream-hash',
+    'stream-buffer-compare',
+    'download-buffer',
+    'download-hash'
+  ],
   remoteTimeoutMs: 8000,
   remoteMaxRetries: 2,
   partialHashChunkSize: 64 * 1024,
@@ -40,292 +43,232 @@ export const FileSageConfig: FileSageConfigType = {
   preferPartialHash: true
 }
 
-// Helper to allow user override
+// Allow user override
 export function configureFileSage(options: Partial<FileSageConfigType>) {
   Object.assign(FileSageConfig, options)
 }
 
-// Internals
+// Helpers
 const textFileExtensions = ['.txt', '.csv', '.json', '.xml', '.html', '.md']
-
-function isTextFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase()
-  return textFileExtensions.includes(ext)
+function isTextFile(p: string): boolean {
+  return textFileExtensions.includes(path.extname(p).toLowerCase())
 }
-
-function isUrl(path: string): boolean {
-  return path.startsWith('http://') || path.startsWith('https://')
+function isUrl(p: string): boolean {
+  return p.startsWith('http://') || p.startsWith('https://')
 }
-
-async function getFileSize(filePath: string): Promise<number> {
-  const stats = await fsp.stat(filePath)
-  return stats.size
+async function getFileSize(p: string): Promise<number> {
+  return (await fsp.stat(p)).size
 }
-
 async function retry<T>(fn: () => Promise<T>, retries = FileSageConfig.remoteMaxRetries): Promise<T> {
   let attempt = 0
   while (attempt <= retries) {
     try {
       return await fn()
-    } catch (error) {
-      if (attempt === retries) {
-        throw error
-      }
+    } catch (err) {
+      if (attempt === retries) throw err
       attempt++
     }
   }
-  throw new Error('Retry logic failed unexpectedly')
+  throw new Error('Retry logic failed')
 }
 
+// Fetch headers
 async function fetchHead(url: string) {
+  const headers = { 'Accept-Encoding': 'identity' }
   try {
-    const response = await axios.head(url, { timeout: FileSageConfig.remoteTimeoutMs })
+    const resp = await axios.head(url, { timeout: FileSageConfig.remoteTimeoutMs, headers })
     return {
-      contentLength: Number(response.headers['content-length'] || 0),
-      etag: response.headers['etag'] ? response.headers['etag'].replace(/"/g, '') : undefined,
-      contentType: response.headers['content-type']
+      contentLength: Number(resp.headers['content-length'] || 0),
+      etag: resp.headers['etag']?.replace(/"/g, '') || undefined,
+      contentType: resp.headers['content-type']
     }
-  } catch (error: any) {
-    if (error.response && error.response.status === 405) {
-      const response = await axios.get(url, { timeout: FileSageConfig.remoteTimeoutMs })
+  } catch (err: any) {
+    if (err.response?.status === 405) {
+      const resp = await axios.get(url, { timeout: FileSageConfig.remoteTimeoutMs, headers })
       return {
-        contentLength: Number(response.headers['content-length'] || 0),
-        etag: response.headers['etag'] ? response.headers['etag'].replace(/"/g, '') : undefined,
-        contentType: response.headers['content-type']
+        contentLength: Number(resp.headers['content-length'] || 0),
+        etag: resp.headers['etag']?.replace(/"/g, '') || undefined,
+        contentType: resp.headers['content-type']
       }
     }
-    throw error
+    throw err
   }
 }
 
-async function downloadRemoteFile(url: string, tempPath: string): Promise<void> {
+// Download remote file
+async function downloadRemoteFile(url: string, dest: string): Promise<void> {
   await retry(async () => {
-    const response = await axios.get(url, { responseType: 'stream', timeout: FileSageConfig.remoteTimeoutMs })
-    const writer = fs.createWriteStream(tempPath)
-    await new Promise<void>((resolve, reject) => {
-      response.data.pipe(writer)
-      writer.on('finish', () => resolve())
-      writer.on('error', reject)
+    const resp = await axios.get(url, {
+      responseType: 'stream',
+      timeout: FileSageConfig.remoteTimeoutMs,
+      headers: { 'Accept-Encoding': 'identity' }
+    })
+    await new Promise<void>((res, rej) => {
+      resp.data.pipe(fs.createWriteStream(dest))
+        .on('finish', res)
+        .on('error', rej)
     })
   })
 }
 
+// Stream-hash from URL
 async function streamHashFromUrl(url: string): Promise<string> {
-  return await retry(async () => {
-    const response = await axios.get(url, { responseType: 'stream', timeout: FileSageConfig.remoteTimeoutMs })
+  return retry(async () => {
+    const resp = await axios.get(url, {
+      responseType: 'stream',
+      timeout: FileSageConfig.remoteTimeoutMs,
+      headers: { 'Accept-Encoding': 'identity' }
+    })
     const hash = createHash('sha256')
     return new Promise<string>((resolve, reject) => {
-      response.data.on('data', (chunk: Buffer) => hash.update(chunk))
-      response.data.on('end', () => resolve(hash.digest('hex')))
-      response.data.on('error', reject)
+      resp.data.on('data', (c: Buffer) => hash.update(c))
+      resp.data.on('end', () => resolve(hash.digest('hex')))
+      resp.data.on('error', reject)
     })
   })
 }
 
-async function hashPartial(filePath: string): Promise<string> {
-  const stats = await fsp.stat(filePath)
-  const size = stats.size
-  const chunkSize = FileSageConfig.partialHashChunkSize
-  const fd = await fsp.open(filePath, 'r')
-
+// Local partial hash
+async function hashPartial(p: string): Promise<string> {
+  const size = (await fsp.stat(p)).size
+  const chunk = FileSageConfig.partialHashChunkSize
+  const fd = await fsp.open(p, 'r')
   try {
     const hash = createHash('sha256')
-    const buffers: Buffer[] = []
-
-    const headBuffer = Buffer.alloc(Math.min(chunkSize, size))
-    await fd.read(headBuffer, 0, headBuffer.length, 0)
-    buffers.push(headBuffer)
-
-    if (size > chunkSize * 2) {
-      const middlePos = Math.floor(size / 2) - Math.floor(chunkSize / 2)
-      const middleBuffer = Buffer.alloc(Math.min(chunkSize, size))
-      await fd.read(middleBuffer, 0, middleBuffer.length, middlePos)
-      buffers.push(middleBuffer)
+    const headLen = Math.min(chunk, size)
+    const headBuf = Buffer.alloc(headLen)
+    await fd.read(headBuf, 0, headLen, 0)
+    hash.update(headBuf)
+    if (size > chunk) {
+      const tailPos = size - chunk
+      const tailLen = Math.min(chunk, size)
+      const tailBuf = Buffer.alloc(tailLen)
+      await fd.read(tailBuf, 0, tailLen, tailPos)
+      hash.update(tailBuf)
     }
-
-    if (size > chunkSize) {
-      const tailPos = size - chunkSize
-      const tailBuffer = Buffer.alloc(Math.min(chunkSize, size))
-      await fd.read(tailBuffer, 0, tailBuffer.length, tailPos)
-      buffers.push(tailBuffer)
-    }
-
-    for (const buf of buffers) {
-      hash.update(buf)
-    }
-
     return hash.digest('hex')
   } finally {
     await fd.close()
   }
 }
 
-async function fullHash(filePath: string): Promise<string> {
-  const data = await fsp.readFile(filePath)
+// Remote partial hash
+async function remotePartialHash(url: string): Promise<string> {
+  const chunk = FileSageConfig.partialHashChunkSize
+  const h1 = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: FileSageConfig.remoteTimeoutMs,
+    headers: { 'Accept-Encoding': 'identity', Range: `bytes=0-${chunk-1}` }
+  })
+  const total = parseInt(h1.headers['content-range']?.split('/')[1] || '0', 10)
+  const start = Math.max(0, total - chunk)
+  const h2 = await axios.get(url, {
+    responseType: 'arraybuffer',
+    timeout: FileSageConfig.remoteTimeoutMs,
+    headers: { 'Accept-Encoding': 'identity', Range: `bytes=${start}-${total-1}` }
+  })
+  const hash = createHash('sha256')
+  hash.update(Buffer.from(h1.data as ArrayBuffer)).update(Buffer.from(h2.data as ArrayBuffer))
+  return hash.digest('hex')
+}
+
+// Full local hash
+async function fullHash(p: string): Promise<string> {
+  const data = await fsp.readFile(p)
   return createHash('sha256').update(data).digest('hex')
 }
-
-async function smartHash(filePath: string): Promise<string> {
-  return FileSageConfig.preferPartialHash ? hashPartial(filePath) : fullHash(filePath)
+async function smartHash(p: string): Promise<string> {
+  return FileSageConfig.preferPartialHash ? hashPartial(p) : fullHash(p)
 }
 
-async function compareFilesByString(file1: string, file2: string): Promise<void> {
-  const [content1, content2] = await Promise.all([
-    fsp.readFile(file1, 'utf8'),
-    fsp.readFile(file2, 'utf8')
-  ])
-  if (content1 !== content2) {
-    throw new Error(`Text file contents differ: ${file1} vs ${file2}`)
-  }
+// Comparison helpers
+async function compareFilesByString(f1: string, f2: string): Promise<void> {
+  const [a, b] = await Promise.all([ fsp.readFile(f1, 'utf8'), fsp.readFile(f2, 'utf8') ])
+  if (a !== b) throw new Error('Text contents differ')
+}
+async function compareFilesByBuffer(f1: string, f2: string): Promise<void> {
+  const [a, b] = await Promise.all([ fsp.readFile(f1), fsp.readFile(f2) ])
+  if (!a.equals(b)) throw new Error('Binary contents differ')
 }
 
-async function compareFilesByBuffer(file1: string, file2: string): Promise<void> {
-  const [buffer1, buffer2] = await Promise.all([
-    fsp.readFile(file1),
-    fsp.readFile(file2)
-  ])
-  if (!buffer1.equals(buffer2)) {
-    throw new Error(`Binary file contents differ: ${file1} vs ${file2}`)
-  }
-}
-
-async function compareFilesByHash(file1: string, file2: string): Promise<void> {
-  const [hash1, hash2] = await Promise.all([
-    smartHash(file1),
-    smartHash(file2)
-  ])
-  if (hash1 !== hash2) {
-    throw new Error(`File hashes differ: ${file1} vs ${file2}`)
-  }
-}
-
-async function streamBufferCompare(file1: string, url: string): Promise<void> {
-  const readStream = fs.createReadStream(file1, { highWaterMark: FileSageConfig.chunkCompareSize })
-  const response = await axios.get(url, { responseType: 'stream', timeout: FileSageConfig.remoteTimeoutMs })
-  const remoteStream = response.data
-
-  return new Promise<void>((resolve, reject) => {
-    const reader = readStream[Symbol.asyncIterator]()
-    const remoteReader = remoteStream[Symbol.asyncIterator]()
-
-    async function compareChunks() {
-      try {
-        while (true) {
-          const [localResult, remoteResult] = await Promise.all([reader.next(), remoteReader.next()])
-          if (localResult.done && remoteResult.done) {
-            resolve()
-            break
-          }
-          if (localResult.done || remoteResult.done) {
-            reject(new Error('Files have different lengths'))
-            break
-          }
-          if (Buffer.compare(localResult.value, remoteResult.value) !== 0) {
-            reject(new Error('Chunks differ'))
-            break
-          }
-        }
-      } catch (error) {
-        reject(error)
-      }
-    }    
-
-    compareChunks()
+// Stream-Buffer compare from URL
+async function streamBufferCompare(local: string, url: string): Promise<void> {
+  const ls = fs.createReadStream(local, { highWaterMark: FileSageConfig.chunkCompareSize })
+  const resp = await axios.get(url, {
+    responseType: 'stream',
+    timeout: FileSageConfig.remoteTimeoutMs,
+    headers: { 'Accept-Encoding': 'identity' }
   })
+  const rs = resp.data
+  const li = ls[Symbol.asyncIterator]()
+  const ri = rs[Symbol.asyncIterator]()
+  while (true) {
+    const [l, r] = await Promise.all([ li.next(), ri.next() ])
+    if (l.done && r.done) return
+    if (l.done || r.done) throw new Error('Stream lengths differ')
+    if (Buffer.compare(l.value, r.value) !== 0) throw new Error('Stream chunk mismatch')
+  }
 }
 
-// Main Entry
-export async function expectFilesToBeEqual(filePath1: string, filePath2: string): Promise<void> {
-  const isRemote = isUrl(filePath2)
-
-  if (!isRemote) {
-    const [size1, size2] = await Promise.all([
-      getFileSize(filePath1),
-      getFileSize(filePath2)
-    ])
-
-    if (size1 !== size2) {
-      throw new Error(`Files have different sizes: ${filePath1} (${size1}) vs ${filePath2} (${size2})`)
-    }
-
-    const isText = isTextFile(filePath1)
-
-    if (isText) {
-      if (size1 <= FileSageConfig.textMaxSizeBytes) {
-        await compareFilesByString(filePath1, filePath2)
-      } else {
-        await compareFilesByHash(filePath1, filePath2)
-      }
+// Main entry
+export async function expectFilesToBeEqual(path1: string, path2: string): Promise<void> {
+  if (!isUrl(path2)) {
+    const [s1, s2] = await Promise.all([ getFileSize(path1), getFileSize(path2) ])
+    if (s1 !== s2) throw new Error(`Size mismatch ${s1} vs ${s2}`)
+    if (isTextFile(path1)) {
+      await compareFilesByString(path1, path2)
     } else {
-      if (size1 <= FileSageConfig.binaryMaxSizeBytes) {
-        await compareFilesByBuffer(filePath1, filePath2)
-      } else {
-        await compareFilesByHash(filePath1, filePath2)
-      }
+      await compareFilesByBuffer(path1, path2)
     }
-  } else {
-    const localSize = await getFileSize(filePath1)
-    const { contentLength, etag, contentType } = await fetchHead(filePath2)
-
-    if (FileSageConfig.mimeTypeCheckEnabled) {
-      if (contentType && contentType.startsWith('text/') !== isTextFile(filePath1)) {
-        throw new Error(`MIME type mismatch between ${filePath1} and ${filePath2}`)
-      }
-    }
-
-    for (const strategy of FileSageConfig.remoteComparisonStrategies) {
-      if (strategy === 'etag') {
-        const localHash = await smartHash(filePath1)
-        if (etag && etag === localHash) {
-          return
-        }
-      }
-
-      if (strategy === 'content-length') {
-        if (localSize === contentLength) {
-          return
-        }
-      }
-
-      if (strategy === 'partial-hash') {
-        const [localPartial, remotePartial] = await Promise.all([
-          smartHash(filePath1),
-          streamHashFromUrl(filePath2)
-        ])
-        if (localPartial === remotePartial) {
-          return
-        }
-      }
-
-      if (strategy === 'stream-hash') {
-        const [localFull, remoteFull] = await Promise.all([
-          smartHash(filePath1),
-          streamHashFromUrl(filePath2)
-        ])
-        if (localFull === remoteFull) {
-          return
-        }
-      }
-
-      if (strategy === 'stream-buffer-compare') {
-        await streamBufferCompare(filePath1, filePath2)
-        return
-      }
-
-      if (strategy === 'download-buffer' || strategy === 'download-hash') {
-        const tempPath = path.join(__dirname, `../temp/temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.bin`)
-        await fsp.mkdir(path.dirname(tempPath), { recursive: true })
-        await downloadRemoteFile(filePath2, tempPath)
-        if (strategy === 'download-buffer') {
-          await compareFilesByBuffer(filePath1, tempPath)
-        } else {
-          await compareFilesByHash(filePath1, tempPath)
-        }
-        await fsp.unlink(tempPath)
-        return
-      }
-    }
-
-    throw new Error(`Remote file did not match by any strategy: ${filePath1} vs ${filePath2}`)
+    return
   }
+  // Remote case
+  const localSize = await getFileSize(path1)
+  const head = await fetchHead(path2)
+  if (FileSageConfig.mimeTypeCheckEnabled && head.contentType) {
+    if (head.contentType.startsWith('text/') !== isTextFile(path1)) {
+      throw new Error('MIME type mismatch')
+    }
+  }
+  for (const strat of FileSageConfig.remoteComparisonStrategies) {
+    try {
+      switch (strat) {
+        case 'content-length':
+          if (localSize === head.contentLength) return
+          break
+        case 'etag':
+          if (head.etag && (await smartHash(path1)) === head.etag) return
+          break
+        case 'partial-hash': {
+          const lp = await hashPartial(path1)
+          const rp = await remotePartialHash(path2)
+          if (lp === rp) return
+          break
+        }
+        case 'stream-hash':
+          if ((await smartHash(path1)) === await streamHashFromUrl(path2)) return
+          break
+        case 'stream-buffer-compare':
+          await streamBufferCompare(path1, path2)
+          return
+        case 'download-buffer': {
+          const tmp = path.join(__dirname, `../temp/${Date.now()}_${path.basename(path2)}`)
+          await downloadRemoteFile(path2, tmp)
+          await compareFilesByBuffer(path1, tmp)
+          await fsp.unlink(tmp)
+          return
+        }
+        case 'download-hash': {
+          const tmp2 = path.join(__dirname, `../temp/${Date.now()}_${path.basename(path2)}`)
+          await downloadRemoteFile(path2, tmp2)
+          await compareFilesByBuffer(path1, tmp2)
+          await fsp.unlink(tmp2)
+          return
+        }
+      }
+    } catch {
+      continue
+    }
+  }
+  throw new Error(`No remote match for ${path1} vs ${path2}`)
 }
