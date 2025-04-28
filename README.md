@@ -8,7 +8,7 @@ Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript pro
 
 ## Install
 
-npm install filesage
+`npm install filesage`
 
 ## Usage
 
@@ -59,7 +59,7 @@ FileSageConfig.preferPartialHash = false
 FileSageConfig.remoteComparisonStrategies = ['etag', 'content-length', 'stream-buffer-compare']
 ```
 
-✅ Configuration changes apply immediately for all future file comparisons.
+✅ Configuration changes apply immediately for all future file comparisons.<br>
 ✅ No rebuild or restart is necessary.
 
 Or use the helper function:
@@ -90,7 +90,7 @@ stream-buffer-compare | Compare streamed chunks directly
 download-buffer | Download remote file and compare by buffer
 download-hash | Download remote file and compare by hash
 
-✅ You can customize the priority and order of strategies!
+✅ You can customize the priority and order of strategies!<br>
 ✅ FileSage will try them in order until one matches.
 
 ---
