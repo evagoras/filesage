@@ -8,15 +8,17 @@ Smart, safe, and scalable file comparison toolkit for Node.js and TypeScript pro
 
 ## Install
 
-`npm install filesage`
+npm install filesage
 
 ## Usage
 
-```typescript
 import { expectFilesToBeEqual } from 'filesage'
 
 await expectFilesToBeEqual('path/to/file1', 'path/to/file2')
-```
+
+✅ Works for:
+- Local vs Local files
+- Local vs Remote URL files
 
 ## ⚙️ Configuration
 
@@ -24,12 +26,17 @@ FileSage allows you to customize internal performance thresholds easily.
 
 ### Default thresholds
 
-| Setting | Default Value |
-|:--------|:--------------|
-| `textMaxSizeBytes` | 50 KB |
-| `binaryMaxSizeBytes` | 100 KB |
-
-These thresholds determine when FileSage switches comparison strategies.
+Setting | Default Value | Description
+:-------|:--------------|:-----------
+textMaxSizeBytes | 50 KB | Max size for fast text compare (string)
+binaryMaxSizeBytes | 100 KB | Max size for fast binary compare (buffer)
+preferPartialHash | true | Use partial hashing instead of full hashing
+remoteComparisonStrategies | ['etag', 'content-length', 'partial-hash', 'stream-hash'] | Strategies for remote URL comparison
+remoteTimeoutMs | 8000 | Timeout for remote HEAD/GET requests (ms)
+remoteMaxRetries | 2 | Retries for remote requests
+partialHashChunkSize | 64 KB | Size of chunks used for partial hashes
+chunkCompareSize | 512 KB | Chunk size for stream-buffer comparisons
+mimeTypeCheckEnabled | false | Check MIME types for text vs binary
 
 ---
 
@@ -37,43 +44,68 @@ These thresholds determine when FileSage switches comparison strategies.
 
 You can override the defaults globally in your project:
 
-```typescript
 import { FileSageConfig } from 'filesage'
 
-// Increase text file string-compare threshold to 80KB
+// Example: Increase text threshold to 80 KB
 FileSageConfig.textMaxSizeBytes = 80 * 1024
 
-// Increase binary file threshold to 200KB
-FileSageConfig.binaryMaxSizeBytes = 200 * 1024
-```
+// Example: Use full hashing instead of partial
+FileSageConfig.preferPartialHash = false
+
+// Example: Customize remote comparison strategies
+FileSageConfig.remoteComparisonStrategies = ['etag', 'content-length', 'stream-buffer-compare']
+
+✅ Configuration changes apply immediately for all future file comparisons.
+✅ No rebuild or restart is necessary.
+
 Or use the helper function:
-```typescript
+
 import { configureFileSage } from 'filesage'
 
 configureFileSage({
   textMaxSizeBytes: 80 * 1024,
-  binaryMaxSizeBytes: 200 * 1024
+  remoteTimeoutMs: 10000,
+  preferPartialHash: false
 })
-```
-✅ Configuration changes apply immediately for all future file comparisons.<br>
-✅ No rebuild or restart is necessary.
 
-### Important Notes
-- These settings are global.
-- You should configure them early in your app before using file comparison functions.
+---
+
+## 📚 Remote File Comparison Strategies
+
+When comparing a local file to a remote URL, FileSage uses these strategies:
+
+Strategy | Meaning
+:--------|:-------
+etag | Compare using ETag header
+content-length | Compare file sizes
+partial-hash | Compare partial SHA256 hash
+stream-hash | Compare full streamed hash
+stream-buffer-compare | Compare streamed chunks directly
+download-buffer | Download remote file and compare by buffer
+download-hash | Download remote file and compare by hash
+
+✅ You can customize the priority and order of strategies!
+✅ FileSage will try them in order until one matches.
+
+---
 
 ## Features
 
 - Text and binary file support
 - Smart small/large file handling
-- Optimized comparison methods (string/buffer/hash)
-- Written in strict TypeScript
+- Remote URL vs local file comparison
+- Automatic fallback strategies
+- Strict TypeScript with excellent types
 - Playwright-tested
 - MIT License
 
+---
+
 ## Related Tools
 
-For benchmarking and tuning, check out FileSage Dev Tools.
+- FileSage Dev Tools — Benchmark and tune file comparisons.
+
+---
 
 ## License
 

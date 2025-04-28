@@ -1,9 +1,28 @@
 {
     "name": "filesage",
     "version": "1.0.0",
-    "description": "Smart, safe, and scalable file comparison toolkit for text and binary files.",
+    "description": "Smart and scalable toolkit for comparing local and remote files in Node.js and TypeScript projects.",
+    "keywords": [
+        "file-compare",
+        "nodejs",
+        "typescript",
+        "remote-file-comparison",
+        "binary-compare",
+        "text-compare",
+        "hashing",
+        "benchmark",
+        "streaming",
+        "url-compare"
+    ],
     "main": "dist/fileComparer.js",
     "types": "dist/fileComparer.d.ts",
+    "files": [
+        "dist/",
+        "README.md"
+    ],
+    "engines": {
+        "node": ">=22.0.0"
+    },
     "scripts": {
         "build": "tsc",
         "test": "playwright test"
@@ -12,24 +31,14 @@
         "type": "git",
         "url": "https://github.com/evagoras/filesage.git"
     },
-    "keywords": [
-        "file",
-        "compare",
-        "comparison",
-        "binary",
-        "text",
-        "hash",
-        "typescript",
-        "buffer",
-        "benchmark",
-        "performance",
-        "playwright"
-    ],
     "author": "Evagoras Charalambous",
     "license": "MIT",
     "devDependencies": {
         "@playwright/test": "^1.52.0",
         "@types/node": "^22.15.2",
         "typescript": "^5.8.3"
+    },
+    "dependencies": {
+        "axios": "^1.9.0"
     }
 }

@@ -38,3 +38,10 @@ test('should confirm two identical binary files are equal', async () => {
 
   await expectFilesToBeEqual(file1, file2)
 })
+
+test('should compare local vs remote file by buffer', async () => {
+  const localPath = './assets/sample1.png'
+  const remoteUrl = 'https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png'
+
+  await expectFilesToBeEqual(localPath, remoteUrl)
+})
